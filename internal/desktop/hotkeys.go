@@ -91,7 +91,12 @@ func listenForHotkey(ctx context.Context, binding hotkeyBinding, callback func()
 			}
 			for {
 				select {
-				case <-binding.Keydown():
+				case <-ctx.Done():
+					return
+				case _, ok := <-binding.Keydown():
+					if !ok {
+						return
+					}
 					continue
 				default:
 					goto drained

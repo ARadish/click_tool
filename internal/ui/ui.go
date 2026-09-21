@@ -176,7 +176,11 @@ func (u *UI) configureTray() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("退出", u.quit),
 	)
-	desktopApp.SetSystemTrayIcon(theme.ComputerIcon())
+	icon := u.app.Icon()
+	if icon == nil {
+		icon = theme.ComputerIcon()
+	}
+	desktopApp.SetSystemTrayIcon(icon)
 	desktopApp.SetSystemTrayMenu(u.trayMenu)
 	desktopApp.SetSystemTrayWindow(u.window)
 }

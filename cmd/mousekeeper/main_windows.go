@@ -10,6 +10,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"mousekeeper/assets"
 	"mousekeeper/internal/config"
 	"mousekeeper/internal/controller"
 	"mousekeeper/internal/desktop"
@@ -33,6 +34,7 @@ func main() {
 	}
 
 	fyneApp := app.NewWithID("com.local.mousekeeper")
+	fyneApp.SetIcon(assets.Icon())
 	configureLogging()
 	store := config.NewStore(fyneApp.Preferences())
 	settings := store.Load()

@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -14,6 +15,27 @@ type fakeBinding struct {
 	up           chan struct{}
 	registerErr  error
 	unregistered bool
+}
+
+func TestListenerReturnsWhenKeydownChannelClosesDuringDebounce(t *testing.T) {
+	binding := newFakeBinding()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		listenForHotkey(ctx, binding, func() {})
+		close(done)
+	}()
+
+	binding.down <- struct{}{}
+	close(binding.down)
+	binding.up <- struct{}{}
+
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("listener did not return after keydown channel closed")
+	}
 }
 
 func newFakeBinding() *fakeBinding {
