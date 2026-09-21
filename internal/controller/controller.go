@@ -78,6 +78,12 @@ func (c *Controller) SetShortcut(value shortcut.Shortcut) error {
 	if err := value.Validate(); err != nil {
 		return err
 	}
+	c.mu.RLock()
+	unchanged := c.settings.Shortcut == value
+	c.mu.RUnlock()
+	if unchanged {
+		return nil
+	}
 	if err := c.hotkeys.Replace(value, c.keeper.Toggle); err != nil {
 		return fmt.Errorf("register %s: %w", value.String(), err)
 	}

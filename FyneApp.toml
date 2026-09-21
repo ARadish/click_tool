@@ -1,0 +1,10 @@
+[Details]
+Name = "MouseKeeper"
+ID = "com.local.mousekeeper"
+Icon = "assets/Icon.png"
+Version = "1.0.0"
+Build = 1
+
+[Migrations]
+fyneDo = true
+

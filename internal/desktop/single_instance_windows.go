@@ -12,7 +12,6 @@ var (
 	kernel32     = syscall.NewLazyDLL("kernel32.dll")
 	user32       = syscall.NewLazyDLL("user32.dll")
 	createMutexW = kernel32.NewProc("CreateMutexW")
-	releaseMutex = kernel32.NewProc("ReleaseMutex")
 	messageBoxW  = user32.NewProc("MessageBoxW")
 )
 
@@ -25,7 +24,7 @@ func AcquireSingleInstance(name string) (*InstanceLock, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	handle, _, callErr := createMutexW.Call(0, 1, uintptr(unsafe.Pointer(namePtr)))
+	handle, _, callErr := createMutexW.Call(0, 0, uintptr(unsafe.Pointer(namePtr)))
 	if handle == 0 {
 		return nil, false, fmt.Errorf("create mutex: %w", callErr)
 	}
@@ -37,7 +36,6 @@ func (l *InstanceLock) Close() error {
 	if l == nil || l.handle == 0 {
 		return nil
 	}
-	releaseMutex.Call(uintptr(l.handle))
 	err := syscall.CloseHandle(l.handle)
 	l.handle = 0
 	return err

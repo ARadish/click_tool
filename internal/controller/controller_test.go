@@ -28,15 +28,33 @@ type fakeHotkeys struct {
 	callback func()
 	err      error
 	closed   bool
+	replaces int
 }
 
 func (f *fakeHotkeys) Replace(value shortcut.Shortcut, callback func()) error {
+	f.replaces++
 	if f.err != nil {
 		return f.err
 	}
 	f.shortcut = value
 	f.callback = callback
 	return nil
+}
+
+func TestSetShortcutDoesNotReregisterUnchangedCombination(t *testing.T) {
+	k := &fakeKeeper{state: keeper.State{Interval: 30 * time.Second}}
+	h := &fakeHotkeys{}
+	c := New(k, h, &fakeStore{}, config.DefaultSettings())
+	if err := c.Initialize(); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+
+	if err := c.SetShortcut(shortcut.Default()); err != nil {
+		t.Fatalf("SetShortcut returned error: %v", err)
+	}
+	if h.replaces != 1 {
+		t.Fatalf("Replace call count = %d, want 1", h.replaces)
+	}
 }
 
 func (f *fakeHotkeys) Close() error { f.closed = true; return nil }
