@@ -41,4 +41,3 @@ jobs:
           name: MouseKeeper-windows-amd64
           path: dist/MouseKeeper.exe
           if-no-files-found: error
-

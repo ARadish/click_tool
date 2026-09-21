@@ -17,4 +17,3 @@ fyne package `
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 Move-Item -Force MouseKeeper.exe dist/MouseKeeper.exe
 Write-Host "Created dist/MouseKeeper.exe"
-

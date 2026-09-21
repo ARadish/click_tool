@@ -11,4 +11,3 @@ func TestIconIsEmbeddedPNG(t *testing.T) {
 		t.Fatal("embedded icon is not a PNG resource")
 	}
 }
-
