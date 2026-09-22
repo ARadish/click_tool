@@ -10,7 +10,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"mousekeeper/internal/controller"
 	"mousekeeper/internal/keeper"
@@ -176,13 +175,14 @@ func (u *UI) configureTray() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("退出", u.quit),
 	)
-	icon := u.app.Icon()
-	if icon == nil {
-		icon = theme.ComputerIcon()
-	}
-	desktopApp.SetSystemTrayIcon(icon)
-	desktopApp.SetSystemTrayMenu(u.trayMenu)
-	desktopApp.SetSystemTrayWindow(u.window)
+	configureDesktopTray(desktopApp, u.trayMenu, u.window)
+}
+
+func configureDesktopTray(app desktop.App, menu *fyne.Menu, window fyne.Window) {
+	// Fyne applies the application icon from its systray OnReady callback.
+	// Calling SetSystemTrayIcon before that callback logs "tray not ready yet" on Windows.
+	app.SetSystemTrayMenu(menu)
+	app.SetSystemTrayWindow(window)
 }
 
 func (u *UI) quit() {

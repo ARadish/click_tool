@@ -41,7 +41,8 @@ func main() {
 
 	var view atomic.Pointer[ui.UI]
 	mover := desktop.NewRobotMouse()
-	engine := keeper.New(mover, settings.Interval, nil, func(state keeper.State) {
+	power := desktop.NewSystemPowerManager()
+	engine := keeper.New(mover, power, settings.Interval, nil, func(state keeper.State) {
 		current := view.Load()
 		if current == nil {
 			return

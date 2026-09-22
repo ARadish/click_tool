@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -11,9 +12,16 @@ type Point struct {
 	Y int
 }
 
+const moveDistance = 10
+
 type MouseMover interface {
 	Position() (Point, error)
 	MoveRelative(dx, dy int) error
+}
+
+type WakeLock interface {
+	Acquire() error
+	Release() error
 }
 
 type Ticker interface {
@@ -57,12 +65,12 @@ type timeTicker struct{ *time.Ticker }
 
 func (t timeTicker) C() <-chan time.Time { return t.Ticker.C }
 
-func New(mover MouseMover, interval time.Duration, factory TickerFactory, onChange func(State)) *Keeper {
+func New(mover MouseMover, wake WakeLock, interval time.Duration, factory TickerFactory, onChange func(State)) *Keeper {
 	if factory == nil {
 		factory = func(interval time.Duration) Ticker { return timeTicker{time.NewTicker(interval)} }
 	}
 	k := &Keeper{commands: make(chan command), done: make(chan struct{})}
-	go k.run(mover, interval, factory, onChange)
+	go k.run(mover, wake, interval, factory, onChange)
 	return k
 }
 
@@ -98,7 +106,9 @@ func (k *Keeper) changeWithInterval(interval time.Duration) error {
 	return <-reply
 }
 
-func (k *Keeper) run(mover MouseMover, interval time.Duration, factory TickerFactory, onChange func(State)) {
+func (k *Keeper) run(mover MouseMover, wake WakeLock, interval time.Duration, factory TickerFactory, onChange func(State)) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	defer close(k.done)
 	state := State{Interval: interval}
 	direction := 1
@@ -112,6 +122,11 @@ func (k *Keeper) run(mover MouseMover, interval time.Duration, factory TickerFac
 	}
 	start := func() {
 		if state.Running {
+			return
+		}
+		if err := wake.Acquire(); err != nil {
+			state.LastError = fmt.Sprintf("keep display awake: %v", err)
+			notify()
 			return
 		}
 		ticker = factory(state.Interval)
@@ -128,6 +143,9 @@ func (k *Keeper) run(mover MouseMover, interval time.Duration, factory TickerFac
 		ticker = nil
 		ticks = nil
 		state.Running = false
+		if err := wake.Release(); err != nil {
+			state.LastError = fmt.Sprintf("release display wake lock: %v", err)
+		}
 		notify()
 	}
 
@@ -180,6 +198,7 @@ func (k *Keeper) run(mover MouseMover, interval time.Duration, factory TickerFac
 				ticker = nil
 				ticks = nil
 				state.Running = false
+				_ = wake.Release()
 				state.LastError = err.Error()
 				notify()
 				continue
@@ -194,7 +213,7 @@ func moveOnce(mover MouseMover, direction int) (int, error) {
 	if err != nil {
 		return direction, fmt.Errorf("read mouse position: %w", err)
 	}
-	if err := mover.MoveRelative(direction, 0); err != nil {
+	if err := mover.MoveRelative(direction*moveDistance, 0); err != nil {
 		return direction, fmt.Errorf("move mouse: %w", err)
 	}
 	after, err := mover.Position()
@@ -203,7 +222,7 @@ func moveOnce(mover MouseMover, direction int) (int, error) {
 	}
 	if after == before {
 		direction = -direction
-		if err := mover.MoveRelative(direction, 0); err != nil {
+		if err := mover.MoveRelative(direction*moveDistance, 0); err != nil {
 			return direction, fmt.Errorf("move mouse from boundary: %w", err)
 		}
 	}

@@ -49,6 +49,22 @@ type fakeMover struct {
 	moveError error
 }
 
+type fakeWakeLock struct {
+	acquireCount int
+	releaseCount int
+	acquireError error
+}
+
+func (w *fakeWakeLock) Acquire() error {
+	w.acquireCount++
+	return w.acquireError
+}
+
+func (w *fakeWakeLock) Release() error {
+	w.releaseCount++
+	return nil
+}
+
 func (m *fakeMover) Position() (Point, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -91,7 +107,41 @@ func waitFor(t *testing.T, condition func() bool) {
 }
 
 func newTestKeeper(mover MouseMover, factory *tickerFactory) *Keeper {
-	return New(mover, 30*time.Second, factory.new, nil)
+	return New(mover, &fakeWakeLock{}, 30*time.Second, factory.new, nil)
+}
+
+func TestStartAcquiresWakeLockAndStopReleasesIt(t *testing.T) {
+	factory := &tickerFactory{}
+	wake := &fakeWakeLock{}
+	k := New(&fakeMover{maxX: 10}, wake, 30*time.Second, factory.new, nil)
+	defer k.Close()
+
+	k.Start()
+	k.Stop()
+
+	if wake.acquireCount != 1 {
+		t.Fatalf("acquire count = %d, want 1", wake.acquireCount)
+	}
+	if wake.releaseCount != 1 {
+		t.Fatalf("release count = %d, want 1", wake.releaseCount)
+	}
+}
+
+func TestWakeLockFailureLeavesKeeperStopped(t *testing.T) {
+	factory := &tickerFactory{}
+	wake := &fakeWakeLock{acquireError: errors.New("power request failed")}
+	k := New(&fakeMover{maxX: 10}, wake, 30*time.Second, factory.new, nil)
+	defer k.Close()
+
+	k.Start()
+
+	state := k.State()
+	if state.Running {
+		t.Fatal("Running = true after wake lock failure")
+	}
+	if state.LastError == "" {
+		t.Fatal("LastError is empty after wake lock failure")
+	}
 }
 
 func TestStartIsIdempotent(t *testing.T) {
@@ -110,7 +160,7 @@ func TestStartIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestTicksMoveOnePixelInAlternatingDirections(t *testing.T) {
+func TestTicksMoveTenPixelsInAlternatingDirections(t *testing.T) {
 	mover := &fakeMover{x: 5, maxX: 10}
 	factory := &tickerFactory{}
 	k := newTestKeeper(mover, factory)
@@ -122,8 +172,8 @@ func TestTicksMoveOnePixelInAlternatingDirections(t *testing.T) {
 	waitFor(t, func() bool { return len(mover.moveSnapshot()) == 2 })
 
 	moves := mover.moveSnapshot()
-	if moves[0] != 1 || moves[1] != -1 {
-		t.Fatalf("moves = %v, want [1 -1]", moves)
+	if moves[0] != 10 || moves[1] != -10 {
+		t.Fatalf("moves = %v, want [10 -10]", moves)
 	}
 }
 
@@ -138,8 +188,8 @@ func TestTickReversesAtScreenBoundary(t *testing.T) {
 	waitFor(t, func() bool { return len(mover.moveSnapshot()) == 2 })
 
 	moves := mover.moveSnapshot()
-	if moves[0] != 1 || moves[1] != -1 {
-		t.Fatalf("boundary moves = %v, want [1 -1]", moves)
+	if moves[0] != 10 || moves[1] != -10 {
+		t.Fatalf("boundary moves = %v, want [10 -10]", moves)
 	}
 }
 
@@ -165,7 +215,8 @@ func TestMoveFailureStopsKeeperAndReportsError(t *testing.T) {
 	mover := &fakeMover{x: 5, maxX: 10, moveError: errors.New("move failed")}
 	factory := &tickerFactory{}
 	states := make(chan State, 4)
-	k := New(mover, 30*time.Second, factory.new, func(state State) { states <- state })
+	wake := &fakeWakeLock{}
+	k := New(mover, wake, 30*time.Second, factory.new, func(state State) { states <- state })
 	defer k.Close()
 	k.Start()
 
@@ -178,6 +229,9 @@ func TestMoveFailureStopsKeeperAndReportsError(t *testing.T) {
 	}
 	if !factory.tickers[0].isStopped() {
 		t.Fatal("ticker was not stopped after movement failure")
+	}
+	if wake.releaseCount != 1 {
+		t.Fatalf("release count = %d after movement failure, want 1", wake.releaseCount)
 	}
 }
 

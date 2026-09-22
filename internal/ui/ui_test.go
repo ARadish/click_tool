@@ -5,12 +5,42 @@ import (
 	"testing"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"mousekeeper/internal/config"
 	"mousekeeper/internal/controller"
 	"mousekeeper/internal/keeper"
 	"mousekeeper/internal/shortcut"
 )
+
+type trayRecorder struct {
+	iconCalls int
+	menu      *fyne.Menu
+	windowSet bool
+}
+
+func (t *trayRecorder) SetSystemTrayIcon(fyne.Resource) { t.iconCalls++ }
+func (t *trayRecorder) SetSystemTrayMenu(menu *fyne.Menu) {
+	t.menu = menu
+}
+func (t *trayRecorder) SetSystemTrayWindow(fyne.Window) { t.windowSet = true }
+
+func TestConfigureDesktopTrayDefersIconUntilFyneIsReady(t *testing.T) {
+	tray := &trayRecorder{}
+	menu := fyne.NewMenu("鼠标保活")
+
+	configureDesktopTray(tray, menu, nil)
+
+	if tray.iconCalls != 0 {
+		t.Fatalf("icon calls = %d, want 0 before systray is ready", tray.iconCalls)
+	}
+	if tray.menu != menu {
+		t.Fatal("tray menu was not configured")
+	}
+	if !tray.windowSet {
+		t.Fatal("tray window was not configured")
+	}
+}
 
 type fakeController struct {
 	state         controller.State
