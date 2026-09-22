@@ -160,36 +160,51 @@ func TestStartIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestTicksMoveTenPixelsInAlternatingDirections(t *testing.T) {
-	mover := &fakeMover{x: 5, maxX: 10}
+func TestStartMovesFiftyPixelsImmediatelyThenAlternatesOnTicks(t *testing.T) {
+	mover := &fakeMover{x: 100, maxX: 1000}
 	factory := &tickerFactory{}
 	k := newTestKeeper(mover, factory)
 	defer k.Close()
 	k.Start()
 
 	factory.tickers[0].ch <- time.Now()
-	factory.tickers[0].ch <- time.Now()
 	waitFor(t, func() bool { return len(mover.moveSnapshot()) == 2 })
 
 	moves := mover.moveSnapshot()
-	if moves[0] != 10 || moves[1] != -10 {
-		t.Fatalf("moves = %v, want [10 -10]", moves)
+	if moves[0] != 50 || moves[1] != -50 {
+		t.Fatalf("moves = %v, want [50 -50]", moves)
 	}
 }
 
-func TestTickReversesAtScreenBoundary(t *testing.T) {
-	mover := &fakeMover{x: 10, maxX: 10}
+func TestStartReversesAtScreenBoundary(t *testing.T) {
+	mover := &fakeMover{x: 100, maxX: 100}
 	factory := &tickerFactory{}
 	k := newTestKeeper(mover, factory)
 	defer k.Close()
 	k.Start()
 
-	factory.tickers[0].ch <- time.Now()
 	waitFor(t, func() bool { return len(mover.moveSnapshot()) == 2 })
 
 	moves := mover.moveSnapshot()
-	if moves[0] != 10 || moves[1] != -10 {
-		t.Fatalf("boundary moves = %v, want [10 -10]", moves)
+	if moves[0] != 50 || moves[1] != -50 {
+		t.Fatalf("boundary moves = %v, want [50 -50]", moves)
+	}
+}
+
+func TestImmobileCursorStopsKeeperAndReportsError(t *testing.T) {
+	mover := &fakeMover{minX: 0, maxX: 0}
+	factory := &tickerFactory{}
+	k := newTestKeeper(mover, factory)
+	defer k.Close()
+
+	k.Start()
+
+	state := k.State()
+	if state.Running {
+		t.Fatal("Running = true when cursor did not move in either direction")
+	}
+	if state.LastError == "" {
+		t.Fatal("LastError is empty when cursor did not move")
 	}
 }
 
@@ -220,15 +235,12 @@ func TestMoveFailureStopsKeeperAndReportsError(t *testing.T) {
 	defer k.Close()
 	k.Start()
 
-	factory.tickers[0].ch <- time.Now()
-	waitFor(t, func() bool { return !k.State().Running })
-
 	state := k.State()
 	if state.LastError == "" {
 		t.Fatal("LastError is empty after movement failure")
 	}
-	if !factory.tickers[0].isStopped() {
-		t.Fatal("ticker was not stopped after movement failure")
+	if len(factory.tickers) != 0 {
+		t.Fatal("ticker was created after immediate movement failure")
 	}
 	if wake.releaseCount != 1 {
 		t.Fatalf("release count = %d after movement failure, want 1", wake.releaseCount)

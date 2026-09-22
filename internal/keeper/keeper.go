@@ -12,7 +12,7 @@ type Point struct {
 	Y int
 }
 
-const moveDistance = 10
+const moveDistance = 50
 
 type MouseMover interface {
 	Position() (Point, error)
@@ -129,6 +129,14 @@ func (k *Keeper) run(mover MouseMover, wake WakeLock, interval time.Duration, fa
 			notify()
 			return
 		}
+		actualDirection, err := moveOnce(mover, direction)
+		if err != nil {
+			_ = wake.Release()
+			state.LastError = err.Error()
+			notify()
+			return
+		}
+		direction = -actualDirection
 		ticker = factory(state.Interval)
 		ticks = ticker.C()
 		state.Running = true
@@ -224,6 +232,13 @@ func moveOnce(mover MouseMover, direction int) (int, error) {
 		direction = -direction
 		if err := mover.MoveRelative(direction*moveDistance, 0); err != nil {
 			return direction, fmt.Errorf("move mouse from boundary: %w", err)
+		}
+		after, err = mover.Position()
+		if err != nil {
+			return direction, fmt.Errorf("verify boundary mouse movement: %w", err)
+		}
+		if after == before {
+			return direction, fmt.Errorf("mouse position did not change in either direction")
 		}
 	}
 	return direction, nil
